@@ -1,26 +1,21 @@
 """AGEA — Gerador de Voz Neural pt-BR"""
 import asyncio
 import re
-import wave
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import streamlit as st
 
-st.set_page_config(page_title="AGEA — Voz Neural", page_icon="⚡", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AGEA — Gerador de Voz", page_icon="🎙️", layout="centered", initial_sidebar_state="collapsed")
 
 BASE = Path(__file__).parent
 SAIDA = BASE / "audios"
 SAIDA.mkdir(exist_ok=True)
-REFS = BASE / "vozes"
-REFS.mkdir(exist_ok=True)
 
-# ─── CSS PROFISSIONAL ─────────────────────────────────────────────
+# ─── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 :root {
     --bg: #ffffff;
     --surface: #f8f9fa;
@@ -29,264 +24,49 @@ st.markdown("""
     --text: #202124;
     --text2: #5f6368;
     --accent: #1a73e8;
-    --accent2: #1a73e8;
-    --gradient: #1a73e8;
     --success: #188038;
     --error: #d93025;
 }
-
 * { font-family: 'Inter', -apple-system, sans-serif !important; }
-
-.stApp {
-    background: var(--bg) !important;
-    color: var(--text) !important;
-}
-
-.block-container {
-    padding-top: 2rem !important;
-    max-width: 720px !important;
-    padding-bottom: 4rem !important;
-}
-
-/* Hide Streamlit branding */
+.stApp { background: var(--bg) !important; color: var(--text) !important; }
+.block-container { padding-top: 2rem !important; max-width: 720px !important; padding-bottom: 4rem !important; }
 #MainMenu, footer, header, .stDeployButton,
-div[data-testid="stToolbar"],
-div[data-testid="stDecoration"],
-div[data-testid="stStatusWidget"],
-button[aria-label="Menu"],
-header[data-testid="stHeader"],
-.streamlit-footer {display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden;}
+div[data-testid="stToolbar"], div[data-testid="stDecoration"],
+div[data-testid="stStatusWidget"], button[aria-label="Menu"],
+header[data-testid="stHeader"], .streamlit-footer
+{display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden;}
 a[href*="streamlit.io"], a[href*="github.com/streamlit"] {display: none !important;}
-
-/* Typography */
 h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
-
-/* Brand Header */
-.brand {
-    text-align: center;
-    padding: 2rem 0 1rem;
-}
-.brand h1 {
-    font-size: 2.2rem !important;
-    font-weight: 700 !important;
-    color: #202124 !important;
-    letter-spacing: -0.5px;
-    margin-bottom: 0.3rem;
-}
-.brand p {
-    color: var(--text2);
-    font-size: 0.95rem;
-    font-weight: 300;
-}
-.brand .tag {
-    display: inline-block;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 4px 14px;
-    font-size: 0.75rem;
-    color: var(--accent2);
-    margin-top: 8px;
-}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-    background: var(--surface) !important;
-    border-radius: 12px !important;
-    padding: 4px !important;
-    gap: 4px !important;
-    border: 1px solid var(--border) !important;
-}
-.stTabs [data-baseweb="tab"] {
-    background: transparent !important;
-    border-radius: 10px !important;
-    color: var(--text2) !important;
-    font-weight: 500 !important;
-    font-size: 0.85rem !important;
-    padding: 10px 16px !important;
-    border: none !important;
-}
-.stTabs [aria-selected="true"] {
-    background: var(--accent) !important;
-    color: white !important;
-}
-
-/* Cards */
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-}
-.card-accent {
-    background: var(--surface);
-    border: 1px solid var(--accent);
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-}
-
-/* Inputs */
-.stTextArea textarea, .stSelectbox div[data-baseweb="select"],
-.stSlider div[data-baseweb="slider"] {
-    background: var(--surface2) !important;
-    color: var(--text) !important;
-    border-color: var(--border) !important;
-    border-radius: 12px !important;
-}
-.stTextArea textarea {
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    color: var(--text) !important;
-    font-size: 0.95rem !important;
-}
-.stTextArea textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px rgba(26,115,232,0.15) !important;
-}
-
-/* Labels */
-.stTextArea label, .stSelectbox label, .stSlider label,
-.stRadio label, .stFileUploader label {
-    color: var(--text2) !important;
-    font-weight: 500 !important;
-    font-size: 0.85rem !important;
-}
-
-/* Buttons */
-.stButton > button {
-    background: var(--surface) !important;
-    color: var(--text) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    font-weight: 500 !important;
-    padding: 0.6rem 1.2rem !important;
-    transition: all 0.2s !important;
-}
-.stButton > button:hover {
-    border-color: var(--accent) !important;
-    background: var(--surface2) !important;
-}
-.stButton > button[kind="primary"],
-.stDownloadButton > button[kind="primary"] {
-    background: #1a73e8 !important;
-    color: white !important;
-    border: none !important;
-    font-weight: 600 !important;
-    padding: 0.75rem 2rem !important;
-}
-.stButton > button[kind="primary"]:hover {
-    opacity: 0.9 !important;
-    transform: translateY(-1px) !important;
-}
-
-/* Quick buttons row */
-.quick-btn {
-    display: inline-block;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 0.8rem;
-    color: var(--text2);
-    cursor: pointer;
-    margin: 2px;
-}
-.quick-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent2);
-}
-
-/* Info boxes */
-.stInfo {
-    background: var(--surface) !important;
-    border: 1px solid var(--accent) !important;
-    border-radius: 12px !important;
-    color: var(--text) !important;
-}
-.stSuccess {
-    background: var(--surface) !important;
-    border: 1px solid var(--success) !important;
-    border-radius: 12px !important;
-}
-.stWarning {
-    background: var(--surface) !important;
-    border: 1px solid #fdcb6e !important;
-    border-radius: 12px !important;
-}
-.stError {
-    background: var(--surface) !important;
-    border: 1px solid var(--error) !important;
-    border-radius: 12px !important;
-}
-
-/* Divider */
-hr {
-    border-color: var(--border) !important;
-    opacity: 0.3 !important;
-}
-
-/* Audio player */
-audio {
-    border-radius: 12px !important;
-}
-
-/* Radio */
-.stRadio > div {
-    background: var(--surface) !important;
-    border-radius: 12px !important;
-    padding: 8px !important;
-    border: 1px solid var(--border) !important;
-}
-
-/* Expander */
-.streamlit-expanderHeader {
-    background: var(--surface) !important;
-    border-radius: 12px !important;
-    border: 1px solid var(--border) !important;
-}
-
-/* Caption */
+.brand { text-align: center; padding: 1.5rem 0 0.5rem; }
+.brand h1 { font-size: 2.2rem !important; font-weight: 700 !important; color: #202124 !important; margin-bottom: 0.2rem; }
+.brand p { color: var(--text2); font-size: 1rem; }
+.brand .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; font-size: 0.75rem; color: var(--accent); margin-top: 8px; }
+.steps { display: flex; gap: 10px; margin: 1.2rem 0; }
+.step { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 12px; text-align: center; }
+.step .n { display: inline-block; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; }
+.step .t { font-weight: 600; font-size: 0.85rem; color: var(--text); }
+.step .d { font-size: 0.78rem; color: var(--text2); margin-top: 2px; }
+.stTextArea textarea { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; color: var(--text) !important; font-size: 0.95rem !important; }
+.stTextArea textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(26,115,232,0.15) !important; }
+.stTextArea label, .stSelectbox label, .stSlider label { color: var(--text2) !important; font-weight: 500 !important; font-size: 0.85rem !important; }
+.stButton > button { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; font-weight: 500 !important; padding: 0.6rem 1.2rem !important; }
+.stButton > button:hover { border-color: var(--accent) !important; }
+.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] { background: #1a73e8 !important; color: white !important; border: none !important; font-weight: 600 !important; padding: 0.75rem 2rem !important; }
+.stInfo, .stSuccess, .stWarning, .stError { border-radius: 12px !important; }
+hr { border-color: var(--border) !important; opacity: 0.4 !important; }
+audio { border-radius: 12px !important; width: 100%; }
+.streamlit-expanderHeader { background: var(--surface) !important; border-radius: 12px !important; border: 1px solid var(--border) !important; }
 .stCaption, p { color: var(--text2) !important; }
-
-/* Stats bar */
-.stats {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    padding: 8px 0;
-}
-.stat {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 8px 16px;
-    text-align: center;
-}
-.stat .num {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--accent2);
-}
-.stat .label {
-    font-size: 0.7rem;
-    color: var(--text2);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Footer */
-.footer-minimal {
-    text-align: center;
-    padding: 2rem 0 1rem;
-    color: var(--text2);
-    font-size: 0.75rem;
-    opacity: 0.5;
-}
+.stats { display: flex; gap: 10px; justify-content: center; padding: 8px 0; }
+.stat { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; text-align: center; }
+.stat .num { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
+.stat .label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.howto { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin: 10px 0; }
+.howto h4 { margin: 0 0 6px 0; font-size: 0.95rem; }
+.howto ol, .howto ul { margin: 6px 0 0 18px; padding: 0; color: var(--text); font-size: 0.9rem; }
+.howto li { margin-bottom: 4px; }
+.footer-minimal { text-align: center; padding: 2rem 0 1rem; color: var(--text2); font-size: 0.75rem; opacity: 0.6; }
 </style>
-
 <script>
 function hideBranding() {
     document.querySelectorAll('footer, [data-testid="stFooter"], #MainMenu, [aria-label="menu"]').forEach(e => e.remove());
@@ -294,38 +74,16 @@ function hideBranding() {
         if (a.href && (a.href.includes('streamlit.io') || a.href.includes('github.com/streamlit'))) a.remove();
     });
 }
-hideBranding();
-setTimeout(hideBranding, 2000);
-setTimeout(hideBranding, 5000);
+hideBranding(); setTimeout(hideBranding, 2000); setTimeout(hideBranding, 5000);
 </script>
 """, unsafe_allow_html=True)
 
-
-# ─── IMPORTS ──────────────────────────────────────────────────────
 try:
     import edge_tts
     HAS_EDGE = True
 except ImportError:
     HAS_EDGE = False
 
-try:
-    from piper import PiperVoice as _PiperVoice
-    MODELOS_PIPER = sorted(
-        (BASE / "modelos").glob("*.onnx")
-    ) if (BASE / "modelos").exists() else []
-    HAS_PIPER = len(MODELOS_PIPER) > 0
-except ImportError:
-    HAS_PIPER = False
-    MODELOS_PIPER = []
-
-try:
-    from voiceclonnx import VoiceCloner as _VoiceCloner
-    HAS_CLONE = True
-except ImportError:
-    HAS_CLONE = False
-
-
-# ─── DATA ─────────────────────────────────────────────────────────
 VOZES = {
     "Francisca — Jovem, vendas": "pt-BR-FranciscaNeural",
     "Antonio — Grave, autoridade": "pt-BR-AntonioNeural",
@@ -350,375 +108,169 @@ ROTEIROS = {
     "Aula": "Aula um. Pega na caneta de forma leve, sem apertar. Agora, desenha um traço lento, de cima para baixo. Respira. Repete cinco vezes. Muito bem.",
 }
 
-
-# ─── HEADER ───────────────────────────────────────────────────────
+# ─── HEADER ─────────────────────────────────────────────────────────
 st.markdown("""
 <div class="brand">
-    <h1>⚡ AGEA</h1>
-    <p>Gerador de Voz Neural — Narração profissional em português</p>
-    <span class="tag">pt-BR · Inteligência Artificial · Gratuito</span>
+    <h1>🎙️ AGEA Voz</h1>
+    <p>Transforma texto em narração profissional em português.<br>Ideal para TikTok, Reels, YouTube, anúncios e aulas.</p>
+    <span class="tag">15 vozes pt-BR · MP3 · Grátis</span>
 </div>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+<div class="steps">
+    <div class="step"><div class="n">1</div><div class="t">Escolhe a voz</div><div class="d">15 vozes femininas e masculinas</div></div>
+    <div class="step"><div class="n">2</div><div class="t">Escreve o texto</div><div class="d">Cola o roteiro ou usa um modelo</div></div>
+    <div class="step"><div class="n">3</div><div class="t">Gera e baixa</div><div class="d">Ouve, baixa o MP3 e usa no vídeo</div></div>
+</div>
+""", unsafe_allow_html=True)
 
-# ─── TABS ─────────────────────────────────────────────────────────
-aba1, aba2, aba3 = st.tabs(["🎤 Neural", "⚡ Local", "🧬 Clonar"])
+if not HAS_EDGE:
+    st.error("Biblioteca edge-tts não instalada.")
+    st.stop()
 
+# ─── 1. VOZ ─────────────────────────────────────────────────────────
+st.subheader("1. Escolhe a voz")
+nome_voz = st.selectbox("Voz", list(VOZES.keys()), index=0, key="voz_neural", label_visibility="collapsed")
+voz = VOZES[nome_voz]
+st.caption("Ouve a dica: Francisca para vendas, Antonio para autoridade, Giovanna para TikTok.")
 
-# ════════════════════════ ABA 1 — EDGE-TTS ════════════════════════
-with aba1:
-    if not HAS_EDGE:
-        st.error("Biblioteca edge-tts não instalada.")
+st.divider()
+
+# ─── 2. TEXTO ───────────────────────────────────────────────────────
+st.subheader("2. Escreve o texto")
+st.caption("Usa um modelo pronto ou escreve o teu roteiro. Máximo 8000 caracteres.")
+m1, m2, m3 = st.columns(3)
+with m1:
+    if st.button("📢 Vendas", key="r1", use_container_width=True):
+        st.session_state["_t"] = ROTEIROS["Vendas"]
+with m2:
+    if st.button("🪝 Gancho TikTok", key="r2", use_container_width=True):
+        st.session_state["_t"] = ROTEIROS["Gancho TikTok"]
+with m3:
+    if st.button("📚 Aula", key="r3", use_container_width=True):
+        st.session_state["_t"] = ROTEIROS["Aula"]
+
+texto = st.text_area("Texto", height=170, key="_t", label_visibility="collapsed",
+                     placeholder="Ex: Resolve a tua letra em 14 dias. Toca no botão e começa hoje...")
+
+texto_final = texto or ""
+palavras = len(texto_final.strip().split()) if texto_final.strip() else 0
+if palavras > 0:
+    duracao = round(palavras / 2.5)
+    st.markdown(f"""
+    <div class="stats">
+        <div class="stat"><div class="num">{len(texto_final)}</div><div class="label">caracteres</div></div>
+        <div class="stat"><div class="num">{palavras}</div><div class="label">palavras</div></div>
+        <div class="stat"><div class="num">~{duracao}s</div><div class="label">áudio</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.info("👆 Escolhe um modelo acima ou escreve o teu texto para começar.")
+
+st.divider()
+
+# ─── 3. AJUSTES ─────────────────────────────────────────────────────
+st.subheader("3. Ajusta (opcional)")
+with st.expander("Velocidade, volume, tom e estilo", expanded=False):
+    velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%", key="vel_neural",
+                           help="+10% ritmo TikTok · -10% tom de aula")
+    cv1, cv2 = st.columns(2)
+    with cv1:
+        volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%", key="vol_neural")
+    with cv2:
+        tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz", key="tom_neural")
+    pausa = st.selectbox("Estilo de pausas", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"], key="pausa_neural")
+
+st.divider()
+
+# ─── 4. GERAR ───────────────────────────────────────────────────────
+st.subheader("4. Gera o áudio")
+
+def preparar(texto, modo):
+    t = re.sub(r"\s+", " ", texto).strip()
+    if modo == "Mais pausada (aula)":
+        t = re.sub(r"([.!?…])\s*", r"\1 ... ", t)
+    return t
+
+async def gerar_mp3(texto, voz, rate, vol, pitch, dest):
+    comm = edge_tts.Communicate(texto, voice=voz,
+                                rate=f"{'+' if rate >= 0 else ''}{rate}%",
+                                volume=f"{'+' if vol >= 0 else ''}{vol}%",
+                                pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz")
+    await comm.save(str(dest))
+
+if st.button("🎙️ Gerar Áudio MP3", type="primary", use_container_width=True, key="btn_mp3"):
+    if not texto_final.strip():
+        st.warning("Escreve o texto primeiro (passo 2).")
         st.stop()
-
-    # — Passo 1: Voz —
-    st.subheader("1. Voz")
-    nome_voz = st.selectbox("Escolhe a voz", list(VOZES.keys()), index=0, key="voz_neural")
-    voz = VOZES[nome_voz]
-
-    st.divider()
-
-    # — Passo 2: Texto —
-    st.subheader("2. Texto")
-    st.caption("Usa um modelo ou escreve o teu roteiro.")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        if st.button("📢 Vendas", key="r1", use_container_width=True):
-            st.session_state["_t"] = ROTEIROS["Vendas"]
-    with m2:
-        if st.button("🪝 Gancho", key="r2", use_container_width=True):
-            st.session_state["_t"] = ROTEIROS["Gancho TikTok"]
-    with m3:
-        if st.button("📚 Aula", key="r3", use_container_width=True):
-            st.session_state["_t"] = ROTEIROS["Aula"]
-
-    texto = st.text_area("Narração", height=160, key="_t",
-                         placeholder="Escreve ou cola aqui o roteiro...")
-
-    texto_final = texto or ""
-    palavras = len(texto_final.strip().split()) if texto_final.strip() else 0
-
-    if palavras > 0:
-        duracao = round(palavras / 2.5)
-        st.markdown(f"""
-        <div class="stats">
-            <div class="stat"><div class="num">{len(texto_final)}</div><div class="label">caracteres</div></div>
-            <div class="stat"><div class="num">{palavras}</div><div class="label">palavras</div></div>
-            <div class="stat"><div class="num">~{duracao}s</div><div class="label">duração</div></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # — Passo 3: Ajustes —
-    st.subheader("3. Ajustes")
-    with st.expander("Velocidade, volume, tom e estilo", expanded=False):
-        velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%", key="vel_neural")
-        c_vt = st.columns(2)
-        with c_vt[0]:
-            volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%", key="vol_neural")
-        with c_vt[1]:
-            tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz", key="tom_neural")
-        pausa = st.selectbox("Estilo de pausas", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"], key="pausa_neural")
-
-    st.divider()
-
-    # — Passo 4: Gerar —
-    st.subheader("4. Gerar")
-
-    def preparar(texto, modo):
-        t = re.sub(r"\s+", " ", texto).strip()
-        if modo == "Mais pausada (aula)":
-            t = re.sub(r"([.!?…])\s*", r"\1 ... ", t)
-        return t
-
-    async def gerar_mp3(texto, voz, rate, vol, pitch, dest):
-        comm = edge_tts.Communicate(texto, voice=voz,
-                                    rate=f"{'+' if rate >= 0 else ''}{rate}%",
-                                    volume=f"{'+' if vol >= 0 else ''}{vol}%",
-                                    pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz")
-        await comm.save(str(dest))
-
-    if st.button("Gerar Áudio", type="primary", use_container_width=True, key="btn_mp3"):
-        if not texto_final.strip():
-            st.warning("Escreve o texto primeiro.")
-            st.stop()
-        if len(texto_final) > 8000:
-            st.warning("Texto muito longo. Divide em partes.")
-            st.stop()
-
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
-        out = SAIDA / f"{ts}_{nome}.mp3"
-
-        with st.spinner("A gerar..."):
-            try:
-                asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
-            except Exception as e:
-                st.error(f"Falha: {e}")
-                st.stop()
-
-        st.success("Pronto!")
-        st.audio(str(out), format="audio/mp3")
-        with open(out, "rb") as f:
-            st.download_button("Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
-                               use_container_width=True, key="dl_mp3")
-
-    st.divider()
-
-    # — Passo 5: Histórico —
-    st.subheader("5. Últimos áudios")
-    mp3s = sorted(SAIDA.glob("*.mp3"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
-    if not mp3s:
-        st.caption("Gera o primeiro áudio acima.")
-    for m in mp3s:
-        with st.expander(f"🔊 {m.name}"):
-            st.audio(str(m), format="audio/mp3")
-            with open(m, "rb") as f:
-                st.download_button("Baixar", f, file_name=m.name, mime="audio/mpeg", key=f"dl_{m.name}")
-
-
-# ════════════════════════ ABA 2 — PIPER ═══════════════════════════
-with aba2:
-    if not HAS_PIPER:
-        st.error("Piper não instalado. Corre `pip install piper-tts`.")
+    if len(texto_final) > 8000:
+        st.warning("Texto muito longo. Divide em partes de 8000 caracteres.")
         st.stop()
-
-    st.caption("⚡ Funciona offline — sem internet, sem limite")
-
-    # — Passo 1: Voz —
-    st.subheader("1. Voz")
-    nomes = [m.stem.replace("pt_BR-", "").replace("-", " ").title() for m in MODELOS_PIPER]
-    idx = st.selectbox("Escolhe a voz local", range(len(nomes)), format_func=lambda i: nomes[i], key="voz_piper")
-    modelo = MODELOS_PIPER[idx]
-
-    @st.cache_resource(show_spinner=False)
-    def load_piper(path):
-        from piper import PiperVoice
-        return PiperVoice.load(str(path))
-
-    st.divider()
-
-    # — Passo 2: Texto —
-    st.subheader("2. Texto")
-    p1, p2, p3 = st.columns(3)
-    with p1:
-        if st.button("📢 Vendas", key="p1", use_container_width=True):
-            st.session_state["tp"] = ROTEIROS["Vendas"]
-    with p2:
-        if st.button("🪝 Gancho", key="p2", use_container_width=True):
-            st.session_state["tp"] = ROTEIROS["Gancho TikTok"]
-    with p3:
-        if st.button("📚 Aula", key="p3", use_container_width=True):
-            st.session_state["tp"] = ROTEIROS["Aula"]
-
-    texto_p = st.text_area("Narração", height=160, key="tp", placeholder="Escreve aqui...") or ""
-    palavras_p = len(texto_p.strip().split()) if texto_p.strip() else 0
-    if palavras_p > 0:
-        st.caption(f"{len(texto_p)} caracteres · {palavras_p} palavras · ~{round(palavras_p/2.5)}s")
-
-    st.divider()
-
-    # — Passo 3: Gerar —
-    st.subheader("3. Gerar")
-
-    if st.button("Gerar WAV", type="primary", use_container_width=True, key="btn_piper"):
-        t = texto_p.strip()
-        if not t:
-            st.warning("Escreve o texto.")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
+    out = SAIDA / f"{ts}_{nome}.mp3"
+    with st.spinner("A gerar voz... 5 a 15 segundos."):
+        try:
+            asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
+        except Exception as e:
+            st.error(f"Falha: {e}. Verifica a internet e tenta de novo.")
             st.stop()
+    st.success("Áudio pronto! Ouve abaixo e baixa.")
+    st.audio(str(out), format="audio/mp3")
+    with open(out, "rb") as f:
+        st.download_button("⬇️ Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
+                           use_container_width=True, key="dl_mp3")
+    st.caption("Guarda o MP3 no telemóvel ou PC para usar no editor de vídeo.")
 
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        nome = re.sub(r"[^\w\-]+", "_", t[:30]).strip("_")[:30] or "narracao"
-        out = SAIDA / f"piper_{ts}_{nome}.wav"
+st.divider()
 
-        with st.spinner("A gerar..."):
-            try:
-                pv = load_piper(modelo)
-                with wave.open(str(out), "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(pv.config.sample_rate)
-                    for chunk in pv.synthesize(t):
-                        audio_int = np.int16(chunk.audio_float_array * 32767)
-                        wf.writeframes(audio_int.tobytes())
-            except Exception as e:
-                st.error(f"Falha: {e}")
-                st.stop()
+# ─── COMO USAR ──────────────────────────────────────────────────────
+st.subheader("Como usar no teu vídeo")
+st.markdown("""
+<div class="howto">
+<h4>📱 CapCut / YouCut (telemóvel)</h4>
+<ol>
+<li>Baixa o MP3 aqui em cima.</li>
+<li>Abre o CapCut → Novo projeto → importa o teu vídeo.</li>
+<li>Toca em <b>Áudio → Sons → Do dispositivo</b> e escolhe o MP3.</li>
+<li>Ajusta o volume e exporta.</li>
+</ol>
+</div>
+<div class="howto">
+<h4>🎬 TikTok / Reels / YouTube Shorts</h4>
+<ul>
+<li>Textos curtos (até 300 caracteres) funcionam melhor.</li>
+<li>Usa velocidade <b>+10%</b> para ritmo rápido.</li>
+<li> Voz <b>Giovanna</b> ou <b>Francisca</b> para prender atenção.</li>
+</ul>
+</div>
+""", unsafe_allow_html=True)
 
-        st.success("Pronto!")
-        st.audio(str(out), format="audio/wav")
-        with open(out, "rb") as f:
-            st.download_button("Baixar WAV", f, file_name=out.name, mime="audio/wav",
-                               use_container_width=True, key="dl_piper")
+with st.expander("💡 Dicas para uma narração perfeita"):
+    st.markdown("""
+- **Frases curtas** soam mais naturais. Evita parágrafos longos.
+- **Pontuação importa:** vírgulas e pontos criam pausas reais.
+- **Números e preços:** escreve por extenso se a voz ler mal (ex: "dois mil novecentos e cinquenta").
+- **Testa 2 vozes** antes de decidir. A mesma frase muda muito de voz para voz.
+- **Divide roteiros longos** em partes e gera um MP3 por parte.
+    """)
 
+st.divider()
 
-# ════════════════════════ ABA 3 — CLONAR ══════════════════════════
-with aba3:
-    if not HAS_CLONE:
-        st.error("voiceclonnx não instalado.")
-        st.stop()
+# ─── HISTÓRICO ──────────────────────────────────────────────────────
+st.subheader("Os teus últimos áudios")
+mp3s = sorted(SAIDA.glob("*.mp3"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
+if not mp3s:
+    st.caption("Ainda não geraste nenhum áudio nesta sessão. O primeiro aparece aqui.")
+for m in mp3s:
+    with st.expander(f"🔊 {m.name}"):
+        st.audio(str(m), format="audio/mp3")
+        with open(m, "rb") as f:
+            st.download_button("Baixar", f, file_name=m.name, mime="audio/mpeg", key=f"dl_{m.name}")
 
-    st.caption("🧬 Clona qualquer voz com 5-30 segundos de referência")
-
-    @st.cache_resource(show_spinner=False)
-    def load_cloner():
-        from voiceclonnx import VoiceCloner
-        return VoiceCloner(engine="triaan")
-
-    # — Passo 1: Referência —
-    st.subheader("1. Voz de referência")
-    refs = sorted(REFS.glob("*.wav")) + sorted(REFS.glob("*.mp3"))
-    opcoes = ["Enviar novo áudio"] + [r.name for r in refs]
-    escolha = st.selectbox("Escolhe ou envia a referência", opcoes, key="voz_ref")
-
-    ref_path = None
-    if escolha == "Enviar novo áudio":
-        metodo = st.radio("Método", ["Gravar agora", "Enviar ficheiro"], horizontal=True, key="metodo_ref")
-
-        if metodo == "Gravar agora":
-            import streamlit.components.v1 as components
-            RECORDER_HTML = """
-            <div style="text-align:center;padding:16px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:16px;">
-              <button id="btnRec" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:#1a73e8;color:#fff;cursor:pointer;font-weight:600;">🎙️ Gravar</button>
-              <button id="btnStop" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:#dee2e6;color:#5f6368;cursor:pointer;font-weight:500;margin-left:8px;" disabled>⏹ Parar</button>
-              <p id="status" style="font-size:13px;color:#5f6368;margin:12px 0 0;">Pronto para gravar</p>
-              <audio id="player" controls style="width:100%;display:none;margin-top:12px;border-radius:10px;"></audio>
-              <a id="download" style="display:none;margin-top:8px;font-size:13px;color:#1a73e8;"></a>
-            </div>
-            <script>
-            let mr, chunks=[], blob;
-            const b1=document.getElementById('btnRec'), b2=document.getElementById('btnStop'),
-                  s=document.getElementById('status'), p=document.getElementById('player'),
-                  d=document.getElementById('download');
-            b1.onclick=async()=>{
-              try{
-                const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-                mr=new MediaRecorder(stream); chunks=[];
-                mr.ondataavailable=e=>chunks.push(e.data);
-                mr.onstop=()=>{
-                  blob=new Blob(chunks,{type:'audio/webm'});
-                  p.src=URL.createObjectURL(blob); p.style.display='block';
-                  stream.getTracks().forEach(t=>t.stop());
-                  s.textContent='✅ Gravado!';
-                  d.textContent='💾 Descarregar'; d.href=p.src; d.download='gravacao.webm'; d.style.display='inline';
-                };
-                mr.start(); b1.disabled=true; b2.disabled=false;
-                b1.style.background='#dee2e6'; b2.style.background='#1a73e8';
-                s.textContent='🔴 A gravar...';
-              }catch(e){s.textContent='❌ Microfone negado';}
-            };
-            b2.onclick=()=>{mr.stop();b1.disabled=false;b2.disabled=true;b1.style.background='#1a73e8';b2.style.background='#dee2e6';};
-            </script>
-            """
-            components.html(RECORDER_HTML, height=180)
-
-            uploaded = st.file_uploader("Ou carrega áudio", type=["wav", "mp3", "webm", "ogg"], key="rec_up")
-            if uploaded:
-                tmp_raw = REFS / f"tmp_{uploaded.name}"
-                tmp_raw.write_bytes(uploaded.getbuffer())
-                ext = uploaded.name.rsplit(".", 1)[-1].lower()
-                if ext in ("webm", "ogg"):
-                    tmp = REFS / "tmp_conv.wav"
-                    try:
-                        import imageio_ffmpeg, subprocess
-                        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", str(tmp_raw),
-                                        "-ar", "22050", "-ac", "1", "-f", "wav", str(tmp)],
-                                       capture_output=True, check=True)
-                    except Exception as e:
-                        st.error(f"Erro: {e}"); st.stop()
-                else:
-                    tmp = tmp_raw
-                st.audio(str(tmp))
-                if st.button("Guardar voz", key="save_rec"):
-                    final = REFS / "minha_voz.wav"
-                    try:
-                        import soundfile as sf
-                        data, sr = sf.read(str(tmp))
-                        if len(data.shape) > 1: data = data.mean(axis=1)
-                        sf.write(str(final), data, sr, subtype="PCM_16")
-                        st.success("Guardada! Atualiza a lista.")
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-                ref_path = tmp
-        else:
-            up = st.file_uploader("Envia 5-30s de voz limpa", type=["wav", "mp3"])
-            if up:
-                tmp = REFS / f"tmp_{up.name}"
-                tmp.write_bytes(up.getbuffer())
-                st.audio(str(tmp))
-                if st.button("Guardar voz"):
-                    final = REFS / "minha_voz.wav"
-                    try:
-                        import soundfile as sf
-                        data, sr = sf.read(str(tmp))
-                        if len(data.shape) > 1: data = data.mean(axis=1)
-                        sf.write(str(final), data, sr, subtype="PCM_16")
-                        st.success("Guardada!")
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-                ref_path = tmp
-    else:
-        ref_path = REFS / escolha
-        st.audio(str(ref_path))
-
-    st.divider()
-
-    # — Passo 2: Texto —
-    st.subheader("2. Texto")
-    texto_clone = st.text_area("O que a voz clonada deve dizer", height=120, key="tc",
-                               placeholder="Resolve a tua letra em 14 dias...")
-
-    st.divider()
-
-    # — Passo 3: Gerar —
-    st.subheader("3. Gerar")
-
-    if st.button("Gerar Voz Clonada", type="primary", use_container_width=True, key="btn_clone"):
-        if ref_path is None or not ref_path.exists():
-            st.warning("Envia ou escolhe a referência.")
-            st.stop()
-        t = re.sub(r"\s+", " ", (texto_clone or "")).strip()
-        if not t:
-            st.warning("Escreve o texto.")
-            st.stop()
-
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out = SAIDA / f"clone_{ts}.wav"
-        piper_model = MODELOS_PIPER[0] if MODELOS_PIPER else None
-        if not piper_model:
-            st.warning("Modelo Piper necessário para voz fonte.")
-            st.stop()
-
-        with st.spinner("1/2 — A gerar voz fonte..."):
-            try:
-                from piper import PiperVoice
-                pv = PiperVoice.load(str(piper_model))
-                tmp_src = SAIDA / f"_src_{ts}.wav"
-                with wave.open(str(tmp_src), "wb") as wf:
-                    wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(pv.config.sample_rate)
-                    for chunk in pv.synthesize(t):
-                        wf.writeframes(np.int16(chunk.audio_float_array * 32767).tobytes())
-            except Exception as e:
-                st.error(f"Falha: {e}"); st.stop()
-
-        with st.spinner("2/2 — A clonar voz..."):
-            try:
-                cloner = load_cloner()
-                cloner.clone_voice(str(tmp_src), str(ref_path), str(out))
-            except Exception as e:
-                st.error(f"Falha: {e}"); st.stop()
-
-        st.success("Voz clonada!")
-        st.audio(str(out), format="audio/wav")
-        with open(out, "rb") as f:
-            st.download_button("Baixar WAV", f, file_name=out.name, mime="audio/wav",
-                               use_container_width=True, key="dl_clone")
-
-
-# ─── FOOTER ───────────────────────────────────────────────────────
 st.markdown("""
 <div class="footer-minimal">
-    AGEA · Voz Neural pt-BR · Powered by AI
+    AGEA Voz · Narração profissional em pt-BR · Feito para criadores
 </div>
 """, unsafe_allow_html=True)
