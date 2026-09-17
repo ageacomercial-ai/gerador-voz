@@ -19,6 +19,19 @@ SAIDA.mkdir(exist_ok=True)
 REFS = BASE / "vozes"
 REFS.mkdir(exist_ok=True)
 
+st.markdown("""
+<style>
+    #MainMenu, footer, header {visibility: hidden;}
+    .stDeployButton {display: none;}
+    div[data-testid="stToolbar"] {display: none;}
+    div[data-testid="stDecoration"] {display: none;}
+    #MainMenu {height: 0 !important;}
+    footer {height: 0 !important; padding: 0 !important;}
+    footer:has(a[href*="streamlit"]) {display: none !important;}
+    .block-container {padding-top: 1rem !important;}
+</style>
+""", unsafe_allow_html=True)
+
 try:
     import edge_tts
     HAS_EDGE = True
