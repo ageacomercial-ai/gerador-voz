@@ -371,37 +371,29 @@ with aba1:
         st.error("Biblioteca edge-tts não instalada.")
         st.stop()
 
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        nome_voz = st.selectbox("Voz", list(VOZES.keys()), index=0)
-        voz = VOZES[nome_voz]
-    with col2:
-        velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%")
+    # — Passo 1: Voz —
+    st.subheader("1. Voz")
+    nome_voz = st.selectbox("Escolhe a voz", list(VOZES.keys()), index=0, key="voz_neural")
+    voz = VOZES[nome_voz]
 
-    col3, col4 = st.columns(2)
-    with col3:
-        volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%")
-    with col4:
-        tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz")
+    st.divider()
 
-    pausa = st.selectbox("Estilo", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"])
-
-    texto = st.text_area("Texto da narração", height=160,
-                         placeholder="Escreve ou cola aqui o roteiro...")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("Vendas", key="r1"):
+    # — Passo 2: Texto —
+    st.subheader("2. Texto")
+    st.caption("Usa um modelo ou escreve o teu roteiro.")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        if st.button("📢 Vendas", key="r1", use_container_width=True):
             st.session_state["_t"] = ROTEIROS["Vendas"]
-    with c2:
-        if st.button("Gancho", key="r2"):
+    with m2:
+        if st.button("🪝 Gancho", key="r2", use_container_width=True):
             st.session_state["_t"] = ROTEIROS["Gancho TikTok"]
-    with c3:
-        if st.button("Aula", key="r3"):
+    with m3:
+        if st.button("📚 Aula", key="r3", use_container_width=True):
             st.session_state["_t"] = ROTEIROS["Aula"]
 
-    if "_t" in st.session_state and st.session_state["_t"]:
-        texto = st.session_state["_t"]
+    texto = st.text_area("Narração", height=160, key="_t",
+                         placeholder="Escreve ou cola aqui o roteiro...")
 
     texto_final = texto or ""
     palavras = len(texto_final.strip().split()) if texto_final.strip() else 0
@@ -415,6 +407,24 @@ with aba1:
             <div class="stat"><div class="num">~{duracao}s</div><div class="label">duração</div></div>
         </div>
         """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # — Passo 3: Ajustes —
+    st.subheader("3. Ajustes")
+    with st.expander("Velocidade, volume, tom e estilo", expanded=False):
+        velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%", key="vel_neural")
+        c_vt = st.columns(2)
+        with c_vt[0]:
+            volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%", key="vol_neural")
+        with c_vt[1]:
+            tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz", key="tom_neural")
+        pausa = st.selectbox("Estilo de pausas", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"], key="pausa_neural")
+
+    st.divider()
+
+    # — Passo 4: Gerar —
+    st.subheader("4. Gerar")
 
     def preparar(texto, modo):
         t = re.sub(r"\s+", " ", texto).strip()
@@ -454,8 +464,10 @@ with aba1:
             st.download_button("Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
                                use_container_width=True, key="dl_mp3")
 
-    st.markdown("---")
-    st.markdown("<p style='text-align:center;color:#5f6368;font-size:0.85rem;'>Últimos áudios</p>", unsafe_allow_html=True)
+    st.divider()
+
+    # — Passo 5: Histórico —
+    st.subheader("5. Últimos áudios")
     mp3s = sorted(SAIDA.glob("*.mp3"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
     if not mp3s:
         st.caption("Gera o primeiro áudio acima.")
@@ -472,14 +484,12 @@ with aba2:
         st.error("Piper não instalado. Corre `pip install piper-tts`.")
         st.stop()
 
-    st.markdown("""
-    <div class="card">
-        <p style="margin:0;color:#1a73e8;font-size:0.85rem;">⚡ Funciona offline — sem internet, sem limite</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("⚡ Funciona offline — sem internet, sem limite")
 
+    # — Passo 1: Voz —
+    st.subheader("1. Voz")
     nomes = [m.stem.replace("pt_BR-", "").replace("-", " ").title() for m in MODELOS_PIPER]
-    idx = st.selectbox("Voz", range(len(nomes)), format_func=lambda i: nomes[i])
+    idx = st.selectbox("Escolhe a voz local", range(len(nomes)), format_func=lambda i: nomes[i], key="voz_piper")
     modelo = MODELOS_PIPER[idx]
 
     @st.cache_resource(show_spinner=False)
@@ -487,23 +497,30 @@ with aba2:
         from piper import PiperVoice
         return PiperVoice.load(str(path))
 
-    texto_p = st.text_area("Texto", height=160, key="tp", placeholder="Escreve aqui...")
+    st.divider()
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("Vendas", key="p1"):
+    # — Passo 2: Texto —
+    st.subheader("2. Texto")
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        if st.button("📢 Vendas", key="p1", use_container_width=True):
             st.session_state["tp"] = ROTEIROS["Vendas"]
-    with c2:
-        if st.button("Gancho", key="p2"):
+    with p2:
+        if st.button("🪝 Gancho", key="p2", use_container_width=True):
             st.session_state["tp"] = ROTEIROS["Gancho TikTok"]
-    with c3:
-        if st.button("Aula", key="p3"):
+    with p3:
+        if st.button("📚 Aula", key="p3", use_container_width=True):
             st.session_state["tp"] = ROTEIROS["Aula"]
 
-    texto_p = st.session_state.get("tp", "") or ""
+    texto_p = st.text_area("Narração", height=160, key="tp", placeholder="Escreve aqui...") or ""
     palavras_p = len(texto_p.strip().split()) if texto_p.strip() else 0
     if palavras_p > 0:
         st.caption(f"{len(texto_p)} caracteres · {palavras_p} palavras · ~{round(palavras_p/2.5)}s")
+
+    st.divider()
+
+    # — Passo 3: Gerar —
+    st.subheader("3. Gerar")
 
     if st.button("Gerar WAV", type="primary", use_container_width=True, key="btn_piper"):
         t = texto_p.strip()
@@ -542,20 +559,18 @@ with aba3:
         st.error("voiceclonnx não instalado.")
         st.stop()
 
-    st.markdown("""
-    <div class="card">
-        <p style="margin:0;color:#1a73e8;font-size:0.85rem;">🧬 Clona qualquer voz com 5-30 segundos de referência</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("🧬 Clona qualquer voz com 5-30 segundos de referência")
 
     @st.cache_resource(show_spinner=False)
     def load_cloner():
         from voiceclonnx import VoiceCloner
         return VoiceCloner(engine="triaan")
 
+    # — Passo 1: Referência —
+    st.subheader("1. Voz de referência")
     refs = sorted(REFS.glob("*.wav")) + sorted(REFS.glob("*.mp3"))
     opcoes = ["Enviar novo áudio"] + [r.name for r in refs]
-    escolha = st.selectbox("Voz de referência", opcoes)
+    escolha = st.selectbox("Escolhe ou envia a referência", opcoes, key="voz_ref")
 
     ref_path = None
     if escolha == "Enviar novo áudio":
@@ -647,8 +662,17 @@ with aba3:
         ref_path = REFS / escolha
         st.audio(str(ref_path))
 
-    texto_clone = st.text_area("Texto para clonar", height=120, key="tc",
+    st.divider()
+
+    # — Passo 2: Texto —
+    st.subheader("2. Texto")
+    texto_clone = st.text_area("O que a voz clonada deve dizer", height=120, key="tc",
                                placeholder="Resolve a tua letra em 14 dias...")
+
+    st.divider()
+
+    # — Passo 3: Gerar —
+    st.subheader("3. Gerar")
 
     if st.button("Gerar Voz Clonada", type="primary", use_container_width=True, key="btn_clone"):
         if ref_path is None or not ref_path.exists():
