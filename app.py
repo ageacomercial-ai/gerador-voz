@@ -225,11 +225,51 @@ with tab_online:
         return t
 
     async def gerar_mp3(texto, voz, rate, vol, pitch, dest):
+        import json as _json
+        meta = dest.with_suffix(".metadata.jsonl")
         comm = edge_tts.Communicate(texto, voice=voz,
                                     rate=f"{'+' if rate >= 0 else ''}{rate}%",
                                     volume=f"{'+' if vol >= 0 else ''}{vol}%",
-                                    pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz")
-        await comm.save(str(dest))
+                                    pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz",
+                                    boundary="WordBoundary")
+        await comm.save(str(dest), str(meta))
+        # timestamps por palavra (ticks de 100ns -> segundos)
+        words = []
+        with open(meta, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                m = _json.loads(line)
+                if m.get("type") != "WordBoundary":
+                    continue
+                s = m["offset"] / 10_000_000
+                words.append({"text": m["text"], "start": round(s, 3),
+                              "end": round(s + m["duration"] / 10_000_000, 3)})
+        return words
+
+    def _srt(words, max_chars=42):
+        def ts(sec):
+            ms = int(round(sec * 1000))
+            h, rem = divmod(ms, 3600000)
+            mi, rem = divmod(rem, 60000)
+            s, ms = divmod(rem, 1000)
+            return f"{h:02d}:{mi:02d}:{s:02d},{ms:03d}"
+        cues, cur, start = [], [], None
+        for w in words:
+            if start is None:
+                start = w["start"]
+            cur.append(w)
+            txt = " ".join(x["text"] for x in cur)
+            if len(txt) >= max_chars or (w["text"] and w["text"][-1] in ".!?"):
+                cues.append((start, w["end"], txt))
+                cur, start = [], None
+        if cur:
+            cues.append((start, cur[-1]["end"], " ".join(x["text"] for x in cur)))
+        out = []
+        for i, (a, b, t) in enumerate(cues, 1):
+            out.append(f"{i}\n{ts(a)} --> {ts(b)}\n{t}\n")
+        return "\n".join(out)
 
     if st.button("🎙️ Gerar Áudio MP3", type="primary", use_container_width=True, key="btn_mp3"):
         if not texto_final.strip():
@@ -242,10 +282,10 @@ with tab_online:
         nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
         out = SAIDA / f"{ts}_{nome}.mp3"
         with st.spinner("A gerar voz... 5 a 15 segundos."):
-            ok, ultimo_erro = False, None
+            ok, ultimo_erro, words = False, None, []
             for tentativa in range(1, 4):
                 try:
-                    asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
+                    words = asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
                     ok = True
                     break
                 except Exception as e:
@@ -256,11 +296,17 @@ with tab_online:
             if not ok:
                 st.error(f"Falha: {ultimo_erro}. Sem internet? Usa a aba Offline.")
                 st.stop()
-        st.success("Áudio pronto!")
+        dur_real = round(words[-1]["end"], 2) if words else 0
+        st.success(f"Áudio pronto! Duração real: {dur_real}s · {len(words)} palavras mapeadas.")
         st.audio(str(out), format="audio/mp3")
         with open(out, "rb") as f:
             st.download_button("⬇️ Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
                                use_container_width=True, key="dl_mp3")
+        if words:
+            srt_txt = _srt(words)
+            st.download_button("⬇️ Baixar legendas SRT", srt_txt,
+                               file_name=out.with_suffix(".srt").name, mime="text/plain",
+                               use_container_width=True, key="dl_srt")
 
 # ═══════════════ OFFLINE — PIPER ═══════════════
 with tab_offline:
