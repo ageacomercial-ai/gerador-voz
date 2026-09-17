@@ -234,10 +234,20 @@ if st.button("🎙️ Gerar Áudio MP3", type="primary", use_container_width=Tru
     nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
     out = SAIDA / f"{ts}_{nome}.mp3"
     with st.spinner("A gerar voz... 5 a 15 segundos."):
-        try:
-            asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
-        except Exception as e:
-            st.error(f"Falha: {e}. Verifica a internet e tenta de novo.")
+        ok = False
+        ultimo_erro = None
+        for tentativa in range(1, 4):
+            try:
+                asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
+                ok = True
+                break
+            except Exception as e:
+                ultimo_erro = e
+                if tentativa < 3:
+                    import time
+                    time.sleep(2)
+        if not ok:
+            st.error(f"Falha após 3 tentativas: {ultimo_erro}. Verifica a internet e tenta de novo.")
             st.stop()
     st.success("Áudio pronto! Ouve abaixo e baixa.")
     st.audio(str(out), format="audio/mp3")
