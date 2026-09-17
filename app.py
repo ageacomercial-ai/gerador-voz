@@ -1,9 +1,11 @@
-"""AGEA — Gerador de Voz Neural pt-BR"""
+"""AGEA — Gerador de Voz Neural pt-BR (online + offline)"""
 import asyncio
 import re
+import wave
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import streamlit as st
 
 st.set_page_config(page_title="AGEA — Gerador de Voz", page_icon="🎙️", layout="centered", initial_sidebar_state="collapsed")
@@ -69,6 +71,9 @@ h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
 .step .n { display: inline-block; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; }
 .step .t { font-weight: 600; font-size: 0.85rem; color: var(--text); }
 .step .d { font-size: 0.78rem; color: var(--text2); margin-top: 2px; }
+.stTabs [data-baseweb="tab-list"] { background: var(--surface) !important; border-radius: 12px !important; padding: 4px !important; gap: 4px !important; border: 1px solid var(--border) !important; }
+.stTabs [data-baseweb="tab"] { border-radius: 10px !important; color: var(--text2) !important; font-weight: 500 !important; }
+.stTabs [aria-selected="true"] { background: var(--accent) !important; color: white !important; }
 .stTextArea textarea { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; color: var(--text) !important; font-size: 0.95rem !important; }
 .stTextArea textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(26,115,232,0.15) !important; }
 .stTextArea label, .stSelectbox label, .stSlider label { color: var(--text2) !important; font-weight: 500 !important; font-size: 0.85rem !important; }
@@ -107,6 +112,14 @@ try:
 except ImportError:
     HAS_EDGE = False
 
+try:
+    from piper import PiperVoice as _PiperVoice
+    MODELOS_PIPER = sorted((BASE / "modelos").glob("*.onnx")) if (BASE / "modelos").exists() else []
+    HAS_PIPER = len(MODELOS_PIPER) > 0
+except ImportError:
+    HAS_PIPER = False
+    MODELOS_PIPER = []
+
 VOZES = {
     "Francisca — Jovem, vendas": "pt-BR-FranciscaNeural",
     "Antonio — Grave, autoridade": "pt-BR-AntonioNeural",
@@ -136,125 +149,184 @@ st.markdown("""
 <div class="brand">
     <h1>🎙️ AGEA Voz</h1>
     <p>Transforma texto em narração profissional em português.<br>Ideal para TikTok, Reels, YouTube, anúncios e aulas.</p>
-    <span class="tag">15 vozes pt-BR · MP3 · Grátis</span>
+    <span class="tag">15 vozes pt-BR · Online e Offline · Grátis</span>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="steps">
-    <div class="step"><div class="n">1</div><div class="t">Escolhe a voz</div><div class="d">15 vozes femininas e masculinas</div></div>
-    <div class="step"><div class="n">2</div><div class="t">Escreve o texto</div><div class="d">Cola o roteiro ou usa um modelo</div></div>
-    <div class="step"><div class="n">3</div><div class="t">Gera e baixa</div><div class="d">Ouve, baixa o MP3 e usa no vídeo</div></div>
+    <div class="step"><div class="n">1</div><div class="t">Escolhe a voz</div><div class="d">Online ou offline</div></div>
+    <div class="step"><div class="n">2</div><div class="t">Escreve o texto</div><div class="d">Usa um modelo ou o teu roteiro</div></div>
+    <div class="step"><div class="n">3</div><div class="t">Gera e baixa</div><div class="d">MP3 ou WAV para o vídeo</div></div>
 </div>
 """, unsafe_allow_html=True)
 
-if not HAS_EDGE:
-    st.error("Biblioteca edge-tts não instalada.")
-    st.stop()
+tab_online, tab_offline = st.tabs(["🌐 Online (15 vozes)", "💻 Offline (sem rede)"])
 
-# ─── 1. VOZ ─────────────────────────────────────────────────────────
-st.subheader("1. Escolhe a voz")
-nome_voz = st.selectbox("Voz", list(VOZES.keys()), index=0, key="voz_neural", label_visibility="collapsed")
-voz = VOZES[nome_voz]
-st.caption("Ouve a dica: Francisca para vendas, Antonio para autoridade, Giovanna para TikTok.")
-
-st.divider()
-
-# ─── 2. TEXTO ───────────────────────────────────────────────────────
-st.subheader("2. Escreve o texto")
-st.caption("Usa um modelo pronto ou escreve o teu roteiro. Máximo 8000 caracteres.")
-m1, m2, m3 = st.columns(3)
-with m1:
-    if st.button("📢 Vendas", key="r1", use_container_width=True):
-        st.session_state["_t"] = ROTEIROS["Vendas"]
-with m2:
-    if st.button("🪝 Gancho TikTok", key="r2", use_container_width=True):
-        st.session_state["_t"] = ROTEIROS["Gancho TikTok"]
-with m3:
-    if st.button("📚 Aula", key="r3", use_container_width=True):
-        st.session_state["_t"] = ROTEIROS["Aula"]
-
-texto = st.text_area("Texto", height=170, key="_t", label_visibility="collapsed",
-                     placeholder="Ex: Resolve a tua letra em 14 dias. Toca no botão e começa hoje...")
-
-texto_final = texto or ""
-palavras = len(texto_final.strip().split()) if texto_final.strip() else 0
-if palavras > 0:
-    duracao = round(palavras / 2.5)
-    st.markdown(f"""
-    <div class="stats">
-        <div class="stat"><div class="num">{len(texto_final)}</div><div class="label">caracteres</div></div>
-        <div class="stat"><div class="num">{palavras}</div><div class="label">palavras</div></div>
-        <div class="stat"><div class="num">~{duracao}s</div><div class="label">áudio</div></div>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.info("👆 Escolhe um modelo acima ou escreve o teu texto para começar.")
-
-st.divider()
-
-# ─── 3. AJUSTES ─────────────────────────────────────────────────────
-st.subheader("3. Ajusta (opcional)")
-with st.expander("Velocidade, volume, tom e estilo", expanded=False):
-    velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%", key="vel_neural",
-                           help="+10% ritmo TikTok · -10% tom de aula")
-    cv1, cv2 = st.columns(2)
-    with cv1:
-        volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%", key="vol_neural")
-    with cv2:
-        tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz", key="tom_neural")
-    pausa = st.selectbox("Estilo de pausas", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"], key="pausa_neural")
-
-st.divider()
-
-# ─── 4. GERAR ───────────────────────────────────────────────────────
-st.subheader("4. Gera o áudio")
-
-def preparar(texto, modo):
-    t = re.sub(r"\s+", " ", texto).strip()
-    if modo == "Mais pausada (aula)":
-        t = re.sub(r"([.!?…])\s*", r"\1 ... ", t)
-    return t
-
-async def gerar_mp3(texto, voz, rate, vol, pitch, dest):
-    comm = edge_tts.Communicate(texto, voice=voz,
-                                rate=f"{'+' if rate >= 0 else ''}{rate}%",
-                                volume=f"{'+' if vol >= 0 else ''}{vol}%",
-                                pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz")
-    await comm.save(str(dest))
-
-if st.button("🎙️ Gerar Áudio MP3", type="primary", use_container_width=True, key="btn_mp3"):
-    if not texto_final.strip():
-        st.warning("Escreve o texto primeiro (passo 2).")
+# ═══════════════ ONLINE — EDGE TTS ═══════════════
+with tab_online:
+    if not HAS_EDGE:
+        st.error("Biblioteca edge-tts não instalada.")
         st.stop()
-    if len(texto_final) > 8000:
-        st.warning("Texto muito longo. Divide em partes de 8000 caracteres.")
-        st.stop()
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
-    out = SAIDA / f"{ts}_{nome}.mp3"
-    with st.spinner("A gerar voz... 5 a 15 segundos."):
-        ok = False
-        ultimo_erro = None
-        for tentativa in range(1, 4):
-            try:
-                asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
-                ok = True
-                break
-            except Exception as e:
-                ultimo_erro = e
-                if tentativa < 3:
-                    import time
-                    time.sleep(2)
-        if not ok:
-            st.error(f"Falha após 3 tentativas: {ultimo_erro}. Verifica a internet e tenta de novo.")
+
+    st.caption("Precisa de internet. Melhor qualidade, 15 vozes.")
+
+    st.subheader("1. Escolhe a voz")
+    nome_voz = st.selectbox("Voz", list(VOZES.keys()), index=0, key="voz_neural", label_visibility="collapsed")
+    voz = VOZES[nome_voz]
+    st.caption("Dica: Francisca para vendas, Antonio para autoridade, Giovanna para TikTok.")
+
+    st.divider()
+    st.subheader("2. Escreve o texto")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        if st.button("📢 Vendas", key="r1", use_container_width=True):
+            st.session_state["_t"] = ROTEIROS["Vendas"]
+    with m2:
+        if st.button("🪝 Gancho TikTok", key="r2", use_container_width=True):
+            st.session_state["_t"] = ROTEIROS["Gancho TikTok"]
+    with m3:
+        if st.button("📚 Aula", key="r3", use_container_width=True):
+            st.session_state["_t"] = ROTEIROS["Aula"]
+
+    texto = st.text_area("Texto", height=170, key="_t", label_visibility="collapsed",
+                         placeholder="Ex: Resolve a tua letra em 14 dias. Toca no botão e começa hoje...")
+    texto_final = texto or ""
+    palavras = len(texto_final.strip().split()) if texto_final.strip() else 0
+    if palavras > 0:
+        st.markdown(f"""
+        <div class="stats">
+            <div class="stat"><div class="num">{len(texto_final)}</div><div class="label">caracteres</div></div>
+            <div class="stat"><div class="num">{palavras}</div><div class="label">palavras</div></div>
+            <div class="stat"><div class="num">~{round(palavras / 2.5)}s</div><div class="label">áudio</div></div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("👆 Escolhe um modelo acima ou escreve o teu texto.")
+
+    st.divider()
+    st.subheader("3. Ajusta (opcional)")
+    with st.expander("Velocidade, volume, tom e estilo", expanded=False):
+        velocidade = st.slider("Velocidade", -30, 30, 0, 5, format="%+d%%", key="vel_neural")
+        cv1, cv2 = st.columns(2)
+        with cv1:
+            volume = st.slider("Volume", -30, 30, 0, 5, format="%+d%%", key="vol_neural")
+        with cv2:
+            tom = st.slider("Tom", -20, 20, 0, 5, format="%+dHz", key="tom_neural")
+        pausa = st.selectbox("Estilo de pausas", ["Automática", "Mais pausada (aula)", "Direta (anúncio)"], key="pausa_neural")
+
+    st.divider()
+    st.subheader("4. Gera o áudio")
+
+    def preparar(texto, modo):
+        t = re.sub(r"\s+", " ", texto).strip()
+        if modo == "Mais pausada (aula)":
+            t = re.sub(r"([.!?…])\s*", r"\1 ... ", t)
+        return t
+
+    async def gerar_mp3(texto, voz, rate, vol, pitch, dest):
+        comm = edge_tts.Communicate(texto, voice=voz,
+                                    rate=f"{'+' if rate >= 0 else ''}{rate}%",
+                                    volume=f"{'+' if vol >= 0 else ''}{vol}%",
+                                    pitch=f"{'+' if pitch >= 0 else ''}{pitch}Hz")
+        await comm.save(str(dest))
+
+    if st.button("🎙️ Gerar Áudio MP3", type="primary", use_container_width=True, key="btn_mp3"):
+        if not texto_final.strip():
+            st.warning("Escreve o texto primeiro (passo 2).")
             st.stop()
-    st.success("Áudio pronto! Ouve abaixo e baixa.")
-    st.audio(str(out), format="audio/mp3")
-    with open(out, "rb") as f:
-        st.download_button("⬇️ Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
-                           use_container_width=True, key="dl_mp3")
-    st.caption("Guarda o MP3 no telemóvel ou PC para usar no editor de vídeo.")
+        if len(texto_final) > 8000:
+            st.warning("Texto muito longo. Divide em partes.")
+            st.stop()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nome = re.sub(r"[^\w\-]+", "_", texto_final[:30]).strip("_")[:30] or "narracao"
+        out = SAIDA / f"{ts}_{nome}.mp3"
+        with st.spinner("A gerar voz... 5 a 15 segundos."):
+            ok, ultimo_erro = False, None
+            for tentativa in range(1, 4):
+                try:
+                    asyncio.run(gerar_mp3(preparar(texto_final, pausa), voz, velocidade, volume, tom, out))
+                    ok = True
+                    break
+                except Exception as e:
+                    ultimo_erro = e
+                    if tentativa < 3:
+                        import time
+                        time.sleep(2)
+            if not ok:
+                st.error(f"Falha: {ultimo_erro}. Sem internet? Usa a aba Offline.")
+                st.stop()
+        st.success("Áudio pronto!")
+        st.audio(str(out), format="audio/mp3")
+        with open(out, "rb") as f:
+            st.download_button("⬇️ Baixar MP3", f, file_name=out.name, mime="audio/mpeg",
+                               use_container_width=True, key="dl_mp3")
+
+# ═══════════════ OFFLINE — PIPER ═══════════════
+with tab_offline:
+    st.caption("Funciona sem internet. Usa o modelo guardado no PC.")
+    if not HAS_PIPER:
+        st.warning("Modelo offline não encontrado neste ambiente.")
+        st.info("No PC local: coloca o ficheiro `.onnx` na pasta `gerador-voz/modelos/` e instala com `pip install piper-tts`. Na web esta aba fica indisponível.")
+        st.stop()
+
+    nomes = [m.stem.replace("pt_BR-", "").replace("-", " ").title() for m in MODELOS_PIPER]
+    st.subheader("1. Escolhe a voz offline")
+    idx = st.selectbox("Voz local", range(len(nomes)), format_func=lambda i: nomes[i], key="voz_piper",
+                       label_visibility="collapsed")
+    modelo = MODELOS_PIPER[idx]
+
+    @st.cache_resource(show_spinner=False)
+    def load_piper(path):
+        from piper import PiperVoice
+        return PiperVoice.load(str(path))
+
+    st.divider()
+    st.subheader("2. Escreve o texto")
+    o1, o2, o3 = st.columns(3)
+    with o1:
+        if st.button("📢 Vendas", key="p1", use_container_width=True):
+            st.session_state["tp"] = ROTEIROS["Vendas"]
+    with o2:
+        if st.button("🪝 Gancho", key="p2", use_container_width=True):
+            st.session_state["tp"] = ROTEIROS["Gancho TikTok"]
+    with o3:
+        if st.button("📚 Aula", key="p3", use_container_width=True):
+            st.session_state["tp"] = ROTEIROS["Aula"]
+
+    texto_p = st.text_area("Texto", height=170, key="tp", label_visibility="collapsed",
+                           placeholder="Escreve aqui... funciona sem internet.") or ""
+    pp = len(texto_p.strip().split()) if texto_p.strip() else 0
+    if pp > 0:
+        st.caption(f"{len(texto_p)} caracteres · {pp} palavras · ~{round(pp / 2.5)}s")
+
+    st.divider()
+    st.subheader("3. Gera o áudio")
+    if st.button("💻 Gerar WAV Offline", type="primary", use_container_width=True, key="btn_piper"):
+        t = texto_p.strip()
+        if not t:
+            st.warning("Escreve o texto.")
+            st.stop()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nome = re.sub(r"[^\w\-]+", "_", t[:30]).strip("_")[:30] or "narracao"
+        out = SAIDA / f"offline_{ts}_{nome}.wav"
+        with st.spinner("A gerar offline..."):
+            try:
+                pv = load_piper(modelo)
+                with wave.open(str(out), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(pv.config.sample_rate)
+                    for chunk in pv.synthesize(t):
+                        wf.writeframes(np.int16(chunk.audio_float_array * 32767).tobytes())
+            except Exception as e:
+                st.error(f"Falha: {e}")
+                st.stop()
+        st.success("Áudio pronto!")
+        st.audio(str(out), format="audio/wav")
+        with open(out, "rb") as f:
+            st.download_button("⬇️ Baixar WAV", f, file_name=out.name, mime="audio/wav",
+                               use_container_width=True, key="dl_piper")
 
 st.divider()
 
@@ -264,9 +336,9 @@ st.markdown("""
 <div class="howto">
 <h4>📱 CapCut / YouCut (telemóvel)</h4>
 <ol>
-<li>Baixa o MP3 aqui em cima.</li>
+<li>Baixa o MP3/WAV aqui em cima.</li>
 <li>Abre o CapCut → Novo projeto → importa o teu vídeo.</li>
-<li>Toca em <b>Áudio → Sons → Do dispositivo</b> e escolhe o MP3.</li>
+<li>Toca em <b>Áudio → Sons → Do dispositivo</b> e escolhe o ficheiro.</li>
 <li>Ajusta o volume e exporta.</li>
 </ol>
 </div>
@@ -275,7 +347,7 @@ st.markdown("""
 <ul>
 <li>Textos curtos (até 300 caracteres) funcionam melhor.</li>
 <li>Usa velocidade <b>+10%</b> para ritmo rápido.</li>
-<li> Voz <b>Giovanna</b> ou <b>Francisca</b> para prender atenção.</li>
+<li>Voz <b>Giovanna</b> ou <b>Francisca</b> para prender atenção.</li>
 </ul>
 </div>
 """, unsafe_allow_html=True)
@@ -285,22 +357,26 @@ with st.expander("💡 Dicas para uma narração perfeita"):
 - **Frases curtas** soam mais naturais. Evita parágrafos longos.
 - **Pontuação importa:** vírgulas e pontos criam pausas reais.
 - **Números e preços:** escreve por extenso se a voz ler mal (ex: "dois mil novecentos e cinquenta").
-- **Testa 2 vozes** antes de decidir. A mesma frase muda muito de voz para voz.
-- **Divide roteiros longos** em partes e gera um MP3 por parte.
+- **Testa 2 vozes** antes de decidir.
+- **Divide roteiros longos** em partes.
     """)
 
 st.divider()
 
 # ─── HISTÓRICO ──────────────────────────────────────────────────────
 st.subheader("Os teus últimos áudios")
-mp3s = sorted(SAIDA.glob("*.mp3"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
-if not mp3s:
-    st.caption("Ainda não geraste nenhum áudio nesta sessão. O primeiro aparece aqui.")
-for m in mp3s:
+ficheiros = sorted(list(SAIDA.glob("*.mp3")) + list(SAIDA.glob("*.wav")),
+                   key=lambda p: p.stat().st_mtime, reverse=True)[:5]
+if not ficheiros:
+    st.caption("Ainda não geraste nenhum áudio. O primeiro aparece aqui.")
+for m in ficheiros:
+    fmt = "audio/mp3" if m.suffix == ".mp3" else "audio/wav"
     with st.expander(f"🔊 {m.name}"):
-        st.audio(str(m), format="audio/mp3")
+        st.audio(str(m), format=fmt)
         with open(m, "rb") as f:
-            st.download_button("Baixar", f, file_name=m.name, mime="audio/mpeg", key=f"dl_{m.name}")
+            st.download_button("Baixar", f, file_name=m.name,
+                               mime="audio/mpeg" if m.suffix == ".mp3" else "audio/wav",
+                               key=f"dl_{m.name}")
 
 st.markdown("""
 <div class="footer-minimal">
