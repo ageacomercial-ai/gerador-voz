@@ -12,21 +12,44 @@ BASE = Path(__file__).parent
 SAIDA = BASE / "audios"
 SAIDA.mkdir(exist_ok=True)
 
+if "tema" not in st.session_state:
+    st.session_state["tema"] = "Claro"
+
+_top_l, _top_r = st.columns([5, 1])
+with _top_r:
+    escuro = st.toggle("🌙", value=(st.session_state["tema"] == "Escuro"), key="toggle_tema",
+                       help="Modo escuro / claro")
+    st.session_state["tema"] = "Escuro" if escuro else "Claro"
+
+DARK = st.session_state["tema"] == "Escuro"
+C = {
+    "bg": "#0f1113" if DARK else "#ffffff",
+    "surface": "#1a1d21" if DARK else "#f8f9fa",
+    "surface2": "#24282e" if DARK else "#eef1f4",
+    "border": "#33373d" if DARK else "#dee2e6",
+    "text": "#f1f3f4" if DARK else "#202124",
+    "text2": "#9aa0a6" if DARK else "#5f6368",
+    "accent": "#8ab4f8" if DARK else "#1a73e8",
+}
+
 # ─── CSS ────────────────────────────────────────────────────────────
+st.markdown(f"""
+<style>
+:root {{
+    --bg: {C["bg"]};
+    --surface: {C["surface"]};
+    --surface2: {C["surface2"]};
+    --border: {C["border"]};
+    --text: {C["text"]};
+    --text2: {C["text2"]};
+    --accent: {C["accent"]};
+}}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-:root {
-    --bg: #ffffff;
-    --surface: #f8f9fa;
-    --surface2: #eef1f4;
-    --border: #dee2e6;
-    --text: #202124;
-    --text2: #5f6368;
-    --accent: #1a73e8;
-    --success: #188038;
-    --error: #d93025;
-}
 * { font-family: 'Inter', -apple-system, sans-serif !important; }
 .stApp { background: var(--bg) !important; color: var(--text) !important; }
 .block-container { padding-top: 2rem !important; max-width: 720px !important; padding-bottom: 4rem !important; }
@@ -38,7 +61,7 @@ header[data-testid="stHeader"], .streamlit-footer
 a[href*="streamlit.io"], a[href*="github.com/streamlit"] {display: none !important;}
 h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
 .brand { text-align: center; padding: 1.5rem 0 0.5rem; }
-.brand h1 { font-size: 2.2rem !important; font-weight: 700 !important; color: #202124 !important; margin-bottom: 0.2rem; }
+.brand h1 { font-size: 2.2rem !important; font-weight: 700 !important; color: var(--text) !important; margin-bottom: 0.2rem; }
 .brand p { color: var(--text2); font-size: 1rem; }
 .brand .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; font-size: 0.75rem; color: var(--accent); margin-top: 8px; }
 .steps { display: flex; gap: 10px; margin: 1.2rem 0; }
@@ -51,7 +74,7 @@ h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
 .stTextArea label, .stSelectbox label, .stSlider label { color: var(--text2) !important; font-weight: 500 !important; font-size: 0.85rem !important; }
 .stButton > button { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; font-weight: 500 !important; padding: 0.6rem 1.2rem !important; }
 .stButton > button:hover { border-color: var(--accent) !important; }
-.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] { background: #1a73e8 !important; color: white !important; border: none !important; font-weight: 600 !important; padding: 0.75rem 2rem !important; }
+.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] { background: var(--accent) !important; color: white !important; border: none !important; font-weight: 600 !important; padding: 0.75rem 2rem !important; }
 .stInfo, .stSuccess, .stWarning, .stError { border-radius: 12px !important; }
 hr { border-color: var(--border) !important; opacity: 0.4 !important; }
 audio { border-radius: 12px !important; width: 100%; }
