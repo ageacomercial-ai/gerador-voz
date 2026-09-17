@@ -161,7 +161,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_online, tab_offline = st.tabs(["🌐 Online (15 vozes)", "💻 Offline (sem rede)"])
+tab_online, tab_offline, tab_video = st.tabs(["🌐 Online (15 vozes)", "💻 Offline (sem rede)", "🎬 Vídeo"])
 
 # ═══════════════ ONLINE — EDGE TTS ═══════════════
 with tab_online:
@@ -423,6 +423,162 @@ for m in ficheiros:
             st.download_button("Baixar", f, file_name=m.name,
                                mime="audio/mpeg" if m.suffix == ".mp3" else "audio/wav",
                                key=f"dl_{m.name}")
+
+# ═══════════════ VÍDEO — STICKMAN (só local) ═══════════════
+with tab_video:
+    st.caption("Gera vídeo animado com narração. Corre neste PC com o motor local.")
+    try:
+        import os as _os
+        from video_engine import demo as _demomod
+        from video_engine.audio import synthesize_piper
+        from video_engine.captions import proportional_cues
+        from video_engine.encode import frames_to_mp4
+        from video_engine.mixer import mix_narration_music
+        from video_engine.render import render_timeline
+        from video_engine.timeline import Timeline
+        HAS_VIDEO = HAS_PIPER and len(MODELOS_PIPER) > 0
+    except ImportError:
+        HAS_VIDEO = False
+
+    if not HAS_VIDEO:
+        st.warning("Motor de vídeo indisponível aqui (precisa do PC local com Piper + modelos).")
+        st.info("No PC local abre http://localhost:8502 e usa esta aba.")
+        st.stop()
+
+    st.subheader("1. Roteiro (narração)")
+    tema_v = st.text_input("Tema do vídeo (opcional — gera roteiro modelo)",
+                           placeholder="Ex: 5 hábitos que destroem a produtividade",
+                           key="tema_video")
+    if st.button("✨ Criar roteiro do tema", key="btn_tema", use_container_width=True):
+        try:
+            from video_engine.script import generate_script
+            if not (tema_v or "").strip():
+                st.warning("Escreve o tema primeiro.")
+            else:
+                st.session_state["texto_video"] = generate_script(tema_v)
+                st.success("Roteiro criado! Edita à vontade e gera o vídeo.")
+        except ImportError:
+            st.error("Motor indisponível (só local).")
+    texto_v = st.text_area("Texto do vídeo", height=120, key="texto_video",
+                           value=_demomod.NARRATION)
+    st.subheader("2. Cenário e opções")
+    modo_v = st.selectbox("Modo", ["Rápido (imagem + zoom) — minutos",
+                                   "Completo (animação total) — lento"], key="modo_video",
+                          help="Rápido: 1 imagem por frase com zoom. Completo: boneco animado frame a frame.")
+    bg_v = st.selectbox("Cenário", ["paper", "room", "office", "park_night", "simple_gradient"], key="bg_video")
+    fmt_v = st.selectbox("Formato", ["Horizontal 720p (1280×720)", "Horizontal 1080p (1920×1080)",
+                                     "Vertical 9:16 (720×1280)", "Quadrado 1:1 (720×720)"], key="fmt_video")
+    co1, co2 = st.columns(2)
+    with co1:
+        fps_v = st.selectbox("FPS", [24, 30], key="fps_video")
+    with co2:
+        vel_v = st.slider("Velocidade da voz", 0.8, 1.2, 1.0, 0.05, key="vel_video",
+                          help="Mais lento = vídeo mais longo; mais rápido = mais curto.",
+                          format="%.2fx")
+    alvo_v = st.selectbox("Duração do vídeo",
+                          ["Automática (dura o que a narração durar)",
+                           "0:30 (30 segundos)", "1 minuto", "2 minutos",
+                           "3 minutos", "5 minutos", "10 minutos",
+                           "15 minutos", "30 minutos", "1 hora"], key="dur_video",
+                          help="Se a narração for mais curta, ela repete até encher o tempo.")
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        cap_v = st.checkbox("Legendas queimadas", value=True, key="cap_video")
+    with cc2:
+        mus_v = st.checkbox("Música de fundo", value=True, key="mus_video")
+
+    st.subheader("3. Gerar")
+    st.caption("~1 min de espera por cada 7 segundos de vídeo. 30 min ≈ 4h. 1 hora ≈ 8h+. Não fechar.")
+    if st.button("🎬 Gerar Vídeo MP4", type="primary", use_container_width=True, key="btn_video"):
+        t = (texto_v or "").strip()
+        if not t:
+            st.warning("Escreve o roteiro.")
+            st.stop()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        outdir = BASE / "output"
+        outdir.mkdir(exist_ok=True)
+        sizes = {"Horizontal 720p (1280×720)": (1280, 720),
+                 "Horizontal 1080p (1920×1080)": (1920, 1080),
+                 "Vertical 9:16 (720×1280)": (720, 1280),
+                 "Quadrado 1:1 (720×720)": (720, 720)}
+        size_v = sizes[fmt_v]
+        wav = outdir / f"video_{ts}_voz.wav"
+        with st.spinner("1/3 — A gerar narração (offline)..."):
+            try:
+                dur = synthesize_piper(t, wav, MODELOS_PIPER[0],
+                                       length_scale=round(1.0 / vel_v, 3))
+            except Exception as e:
+                st.error(f"Falha na narração: {e}")
+                st.stop()
+        alvos = {"0:30 (30 segundos)": 30, "1 minuto": 60, "2 minutos": 120,
+                 "3 minutos": 180, "5 minutos": 300, "10 minutos": 600,
+                 "15 minutos": 900, "30 minutos": 1800, "1 hora": 3600}
+        t_final, wav_final = t, wav
+        if alvo_v in alvos and dur < alvos[alvo_v]:
+            import numpy as _np
+            import soundfile as _sf
+            alvo = alvos[alvo_v]
+            reps = int(-(-alvo // dur))  # ceil
+            data, sr = _sf.read(str(wav))
+            loop = _np.tile(data, reps)[:int(alvo * sr)]
+            wav_final = outdir / f"video_{ts}_loop.wav"
+            _sf.write(str(wav_final), loop, sr, subtype="PCM_16")
+            t_final = " ".join([t] * reps)
+            st.info(f"Narração tinha {dur:.1f}s. Repetida {reps}x para encher {alvo}s.")
+            dur = alvo
+        st.info(f"Vídeo: {dur:.1f}s · {size_v[0]}×{size_v[1]} · {fps_v}fps · "
+                f"{int(round(dur * fps_v))} frames...")
+        rapido = modo_v.startswith("Rápido")
+        prog = st.progress(0, text="A renderizar...")
+        def _prog(feitos, total):
+            prog.progress(min(1.0, feitos / max(1, total)),
+                          text=f"A renderizar... {feitos}/{total}")
+        with st.spinner("2/3 — A renderizar (modo rápido: minutos)...") if rapido else st.spinner("2/3 — A renderizar animação (demora)..."):
+            try:
+                if rapido:
+                    from video_engine.fast import build_fast_video
+                    from video_engine.script import plan_from_text
+                    track0 = wav_final
+                    if mus_v:
+                        track0 = outdir / f"video_{ts}_mix.wav"
+                        mix_narration_music(wav_final, track0)
+                    mp4 = outdir / f"video_{ts}.mp4"
+                    plano = plan_from_text(t_final)
+                    _, _, nsc = build_fast_video(
+                        t_final, track0, mp4, size=size_v, fps=fps_v, bg=bg_v,
+                        workdir=outdir / f"fast_{ts}", progress=_prog,
+                        captions=cap_v, plan=plano)
+                    st.info(f"{nsc} cenas com zoom.")
+                else:
+                    scene = _demomod.build_scene(dur)
+                    scene.background = bg_v
+                    tl = Timeline(scene, fps=fps_v, audio_path=wav_final, audio_duration=dur)
+                    cues = proportional_cues(t_final, dur) if cap_v else None
+                    render_timeline(tl, outdir / f"frames_{ts}", size_v, cues,
+                                    progress=_prog, workers=_os.cpu_count() or 2)
+            except Exception as e:
+                st.error(f"Falha no render: {e}")
+                st.stop()
+        prog.empty()
+        with st.spinner("3/3 — A montar MP4..."):
+            try:
+                if rapido:
+                    pass  # MP4 já montado no passo 2
+                else:
+                    track = wav_final
+                    if mus_v:
+                        track = outdir / f"video_{ts}_mix.wav"
+                        mix_narration_music(wav_final, track)
+                    mp4 = outdir / f"video_{ts}.mp4"
+                    frames_to_mp4(outdir / f"frames_{ts}", track, mp4, fps=fps_v)
+            except Exception as e:
+                st.error(f"Falha no MP4: {e}")
+                st.stop()
+        st.success("Vídeo pronto!")
+        st.video(str(mp4))
+        with open(mp4, "rb") as f:
+            st.download_button("⬇️ Baixar MP4", f, file_name=mp4.name, mime="video/mp4",
+                               use_container_width=True, key=f"dl_{mp4.name}")
 
 st.markdown("""
 <div class="footer-minimal">
