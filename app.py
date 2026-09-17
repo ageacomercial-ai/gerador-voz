@@ -35,7 +35,25 @@ st.markdown("""
     a[href*="streamlit.io"] {display: none !important;}
     a[href*="github.com/streamlit"] {display: none !important;}
     [data-testid="stMarkdownContainer"] small {display: none !important;}
+    div[data-testid="stApp"] > div:last-child {display: none !important;}
+    #streamlit-menu-bar {display: none !important;}
+    section[data-testid="stSidebar"] div[data-testid="stDecoration"] {display: none !important;}
+    .streamlit-footer {display: none !important;}
 </style>
+<script>
+function removeBranding() {
+    document.querySelectorAll('footer, [data-testid="stFooter"], #MainMenu, [aria-label="menu"]').forEach(e => e.remove());
+    document.querySelectorAll('a').forEach(a => {
+        if (a.href && (a.href.includes('streamlit.io') || a.href.includes('github.com/streamlit'))) a.remove();
+    });
+    document.querySelectorAll('[class*="streamlit"]').forEach(e => {
+        if (e.tagName === 'FOOTER' || e.textContent.includes('Streamlit')) e.remove();
+    });
+}
+removeBranding();
+setTimeout(removeBranding, 2000);
+setTimeout(removeBranding, 5000);
+</script>
 """, unsafe_allow_html=True)
 
 try:
