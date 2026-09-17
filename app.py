@@ -21,14 +21,20 @@ REFS.mkdir(exist_ok=True)
 
 st.markdown("""
 <style>
-    #MainMenu, footer, header {visibility: hidden;}
-    .stDeployButton {display: none;}
-    div[data-testid="stToolbar"] {display: none;}
-    div[data-testid="stDecoration"] {display: none;}
-    #MainMenu {height: 0 !important;}
-    footer {height: 0 !important; padding: 0 !important;}
-    footer:has(a[href*="streamlit"]) {display: none !important;}
+    #MainMenu, footer, header {visibility: hidden !important; height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden;}
+    .stDeployButton {display: none !important;}
+    div[data-testid="stToolbar"] {display: none !important;}
+    div[data-testid="stDecoration"] {display: none !important;}
+    div[data-testid="stStatusWidget"] {display: none !important;}
+    button[aria-label="Menu"] {display: none !important;}
+    footer {display: none !important;}
+    footer:has(a) {display: none !important;}
     .block-container {padding-top: 1rem !important;}
+    header[data-testid="stHeader"] {display: none !important;}
+    div[data-testid="stSidebarContent"] hr {display: none !important;}
+    a[href*="streamlit.io"] {display: none !important;}
+    a[href*="github.com/streamlit"] {display: none !important;}
+    [data-testid="stMarkdownContainer"] small {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
