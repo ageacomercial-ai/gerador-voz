@@ -22,17 +22,17 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --bg: #0a0a0a;
-    --surface: #141414;
-    --surface2: #1a1a1a;
-    --border: #2a2a2a;
-    --text: #fafafa;
-    --text2: #a0a0a0;
-    --accent: #6c5ce7;
-    --accent2: #a29bfe;
-    --gradient: linear-gradient(135deg, #6c5ce7, #a29bfe);
-    --success: #00b894;
-    --error: #ff6b6b;
+    --bg: #ffffff;
+    --surface: #f8f9fa;
+    --surface2: #eef1f4;
+    --border: #dee2e6;
+    --text: #202124;
+    --text2: #5f6368;
+    --accent: #1a73e8;
+    --accent2: #1a73e8;
+    --gradient: #1a73e8;
+    --success: #188038;
+    --error: #d93025;
 }
 
 * { font-family: 'Inter', -apple-system, sans-serif !important; }
@@ -67,12 +67,10 @@ h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
     padding: 2rem 0 1rem;
 }
 .brand h1 {
-    font-size: 2.5rem !important;
+    font-size: 2.2rem !important;
     font-weight: 700 !important;
-    background: var(--gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -1px;
+    color: #202124 !important;
+    letter-spacing: -0.5px;
     margin-bottom: 0.3rem;
 }
 .brand p {
@@ -146,7 +144,7 @@ h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
 }
 .stTextArea textarea:focus {
     border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px rgba(108,92,231,0.2) !important;
+    box-shadow: 0 0 0 2px rgba(26,115,232,0.15) !important;
 }
 
 /* Labels */
@@ -173,7 +171,7 @@ h1, h2, h3, h4 { color: var(--text) !important; font-weight: 600 !important; }
 }
 .stButton > button[kind="primary"],
 .stDownloadButton > button[kind="primary"] {
-    background: var(--gradient) !important;
+    background: #1a73e8 !important;
     color: white !important;
     border: none !important;
     font-weight: 600 !important;
@@ -457,7 +455,7 @@ with aba1:
                                use_container_width=True, key="dl_mp3")
 
     st.markdown("---")
-    st.markdown("<p style='text-align:center;color:#666;font-size:0.85rem;'>Últimos áudios</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#5f6368;font-size:0.85rem;'>Últimos áudios</p>", unsafe_allow_html=True)
     mp3s = sorted(SAIDA.glob("*.mp3"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
     if not mp3s:
         st.caption("Gera o primeiro áudio acima.")
@@ -476,7 +474,7 @@ with aba2:
 
     st.markdown("""
     <div class="card">
-        <p style="margin:0;color:#a29bfe;font-size:0.85rem;">⚡ Funciona offline — sem internet, sem limite</p>
+        <p style="margin:0;color:#1a73e8;font-size:0.85rem;">⚡ Funciona offline — sem internet, sem limite</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -546,7 +544,7 @@ with aba3:
 
     st.markdown("""
     <div class="card">
-        <p style="margin:0;color:#a29bfe;font-size:0.85rem;">🧬 Clona qualquer voz com 5-30 segundos de referência</p>
+        <p style="margin:0;color:#1a73e8;font-size:0.85rem;">🧬 Clona qualquer voz com 5-30 segundos de referência</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -566,12 +564,12 @@ with aba3:
         if metodo == "Gravar agora":
             import streamlit.components.v1 as components
             RECORDER_HTML = """
-            <div style="text-align:center;padding:16px;background:#141414;border:1px solid #2a2a2a;border-radius:16px;">
-              <button id="btnRec" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:#fff;cursor:pointer;font-weight:600;">🎙️ Gravar</button>
-              <button id="btnStop" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:#2a2a2a;color:#a0a0a0;cursor:pointer;font-weight:500;margin-left:8px;" disabled>⏹ Parar</button>
-              <p id="status" style="font-size:13px;color:#666;margin:12px 0 0;">Pronto para gravar</p>
+            <div style="text-align:center;padding:16px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:16px;">
+              <button id="btnRec" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:#1a73e8;color:#fff;cursor:pointer;font-weight:600;">🎙️ Gravar</button>
+              <button id="btnStop" style="font-size:15px;padding:10px 28px;border:none;border-radius:10px;background:#dee2e6;color:#5f6368;cursor:pointer;font-weight:500;margin-left:8px;" disabled>⏹ Parar</button>
+              <p id="status" style="font-size:13px;color:#5f6368;margin:12px 0 0;">Pronto para gravar</p>
               <audio id="player" controls style="width:100%;display:none;margin-top:12px;border-radius:10px;"></audio>
-              <a id="download" style="display:none;margin-top:8px;font-size:13px;color:#a29bfe;"></a>
+              <a id="download" style="display:none;margin-top:8px;font-size:13px;color:#1a73e8;"></a>
             </div>
             <script>
             let mr, chunks=[], blob;
@@ -591,11 +589,11 @@ with aba3:
                   d.textContent='💾 Descarregar'; d.href=p.src; d.download='gravacao.webm'; d.style.display='inline';
                 };
                 mr.start(); b1.disabled=true; b2.disabled=false;
-                b1.style.background='#2a2a2a'; b2.style.background='linear-gradient(135deg,#6c5ce7,#a29bfe)';
+                b1.style.background='#dee2e6'; b2.style.background='#1a73e8';
                 s.textContent='🔴 A gravar...';
               }catch(e){s.textContent='❌ Microfone negado';}
             };
-            b2.onclick=()=>{mr.stop();b1.disabled=false;b2.disabled=true;b1.style.background='linear-gradient(135deg,#6c5ce7,#a29bfe)';b2.style.background='#2a2a2a';};
+            b2.onclick=()=>{mr.stop();b1.disabled=false;b2.disabled=true;b1.style.background='#1a73e8';b2.style.background='#dee2e6';};
             </script>
             """
             components.html(RECORDER_HTML, height=180)
